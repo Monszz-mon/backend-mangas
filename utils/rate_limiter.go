@@ -24,6 +24,7 @@ func NewRateLimiter(rateLimit int) *RateLimiter {
 	return instance
 }
 
+// Wait blocks until a token is available
 func (r *RateLimiter) Wait() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

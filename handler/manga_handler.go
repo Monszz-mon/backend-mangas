@@ -1,12 +1,11 @@
 package handler
 
 import (
-	"fmt"
-	"mangades-backend/model"   // <-- DIUBAH
-	"mangades-backend/service" // <-- DIUBAH
+	"mangades-backend/model"
+	"mangades-backend/service"
 	"net/http"
 	"strconv"
-
+	"fmt"
 	"github.com/gin-gonic/gin"
 )
 
@@ -20,6 +19,7 @@ func NewMangaHandler() *MangaHandler {
 	}
 }
 
+// sendSuccess adalah helper response
 func sendSuccess(c *gin.Context, data interface{}) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  http.StatusOK,
@@ -35,6 +35,7 @@ func sendError(c *gin.Context, status int, errMsg string) {
 	})
 }
 
+// SearchManga - GET /api/manga/search?title=naruto&limit=10&page=1
 func (h *MangaHandler) SearchManga(c *gin.Context) {
 	var req model.SearchMangaRequest
 	if err := c.ShouldBindQuery(&req); err != nil {
@@ -66,6 +67,7 @@ func (h *MangaHandler) SearchManga(c *gin.Context) {
 	sendSuccess(c, result)
 }
 
+// GetMangaDetail - GET /api/manga/:id
 func (h *MangaHandler) GetMangaDetail(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -87,6 +89,7 @@ func (h *MangaHandler) GetMangaDetail(c *gin.Context) {
 	sendSuccess(c, result.Data)
 }
 
+// GetMangaFeed - GET /api/manga/:id/chapters?limit=20&page=1&lang=en
 func (h *MangaHandler) GetMangaFeed(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -114,6 +117,7 @@ func (h *MangaHandler) GetMangaFeed(c *gin.Context) {
 	sendSuccess(c, result)
 }
 
+// GetChapterPages - GET /api/chapter/:id/pages?quality=data-saver
 func (h *MangaHandler) GetChapterPages(c *gin.Context) {
 	chapterID := c.Param("id")
 	if chapterID == "" {
@@ -121,7 +125,7 @@ func (h *MangaHandler) GetChapterPages(c *gin.Context) {
 		return
 	}
 
-	quality := c.DefaultQuery("quality", "data-saver")
+	quality := c.DefaultQuery("quality", "data-saver") // or "data"
 
 	atHome, err := h.service.GetAtHomeServer(c.Request.Context(), chapterID)
 	if err != nil {
@@ -129,6 +133,7 @@ func (h *MangaHandler) GetChapterPages(c *gin.Context) {
 		return
 	}
 
+	// Bangun URL gambar lengkap
 	baseURL := atHome.BaseURL
 	hash := atHome.Chapter.Hash
 
@@ -139,8 +144,10 @@ func (h *MangaHandler) GetChapterPages(c *gin.Context) {
 		imageFiles = atHome.Chapter.Data
 	}
 
+	// Buat URL proxy melalui backend kita
 	imageURLs := make([]string, len(imageFiles))
 	for i, filename := range imageFiles {
+		// Gunakan endpoint proxy /api/image?url=...
 		imageURLs[i] = fmt.Sprintf("/api/image?url=%s/%s/%s/%s", baseURL, quality, hash, filename)
 	}
 
