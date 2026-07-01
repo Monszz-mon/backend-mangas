@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"mangades-backend/config"
 	"mangades-backend/model"
 	"mangades-backend/utils"
@@ -81,38 +82,43 @@ func (s *MangaDexService) doRequestWithRetry(ctx context.Context, endpoint strin
 }
 
 func (s *MangaDexService) SearchManga(ctx context.Context, title string, limit, page int) (*model.MangaDexResponse, error) {
-	if limit == 0 {
-		limit = 20
-	}
-	if page < 1 {
-		page = 1
-	}
-	offset := (page - 1) * limit
+    if limit == 0 {
+        limit = 20
+    }
+    if page < 1 {
+        page = 1
+    }
+    offset := (page - 1) * limit
 
-	params := map[string]string{
-		"title":            title,
-		"limit":            fmt.Sprintf("%d", limit),
-		"offset":           fmt.Sprintf("%d", offset),
-		"order[relevance]": "desc",
-		"includes[]":       "cover_art",
-	}
+    params := map[string]string{
+        "title":   title,
+        "limit":   fmt.Sprintf("%d", limit),
+        "offset":  fmt.Sprintf("%d", offset),
+        "includes[]": "cover_art",
+        // Hapus order[relevance] - kadang bikin error
+    }
 
-	resp, err := s.doRequestWithRetry(ctx, "/manga", params, 3)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+    // Tambahkan logging untuk debugging (opsional)
+    fmt.Printf("Searching manga with params: %+v\n", params)
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MangaDex API error: %s", resp.Status)
-	}
+    resp, err := s.doRequestWithRetry(ctx, "/manga", params, 3)
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
 
-	var result model.MangaDexResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
+    if resp.StatusCode != http.StatusOK {
+        // Baca response body untuk tahu detail error
+        body, _ := io.ReadAll(resp.Body)
+        return nil, fmt.Errorf("MangaDex API error: %s - %s", resp.Status, string(body))
+    }
 
-	return &result, nil
+    var result model.MangaDexResponse
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        return nil, err
+    }
+
+    return &result, nil
 }
 
 func (s *MangaDexService) GetMangaByID(ctx context.Context, id string) (*model.MangaDexResponse, error) {
