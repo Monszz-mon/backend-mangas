@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"mangades-backend/config"
-	"mangades-backend/model"
-	"mangades-backend/utils"
+	"mangadex-backend/config"
+	"mangadex-backend/model"
+	"mangadex-backend/utils"
 	"net/http"
 	"net/url"
 	"time"
@@ -48,6 +48,8 @@ func (s *MangaDexService) doRequest(ctx context.Context, endpoint string, queryP
 	}
 	parsedURL.RawQuery = q.Encode()
 
+	fmt.Printf("📡 Requesting: %s\n", parsedURL.String()) // Log URL yang dipanggil
+
 	req, err := http.NewRequestWithContext(ctx, "GET", parsedURL.String(), nil)
 	if err != nil {
 		return nil, err
@@ -55,8 +57,6 @@ func (s *MangaDexService) doRequest(ctx context.Context, endpoint string, queryP
 
 	req.Header.Set("User-Agent", s.userAgent)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("Connection", "keep-alive")
 
 	return s.client.Do(req)
 }
@@ -82,43 +82,44 @@ func (s *MangaDexService) doRequestWithRetry(ctx context.Context, endpoint strin
 }
 
 func (s *MangaDexService) SearchManga(ctx context.Context, title string, limit, page int) (*model.MangaDexResponse, error) {
-    if limit == 0 {
-        limit = 20
-    }
-    if page < 1 {
-        page = 1
-    }
-    offset := (page - 1) * limit
+	if limit == 0 {
+		limit = 20
+	}
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
 
-    params := map[string]string{
-        "title":   title,
-        "limit":   fmt.Sprintf("%d", limit),
-        "offset":  fmt.Sprintf("%d", offset),
-        "includes[]": "cover_art",
-        // Hapus order[relevance] - kadang bikin error
-    }
+	params := map[string]string{
+		"title":      title,
+		"limit":      fmt.Sprintf("%d", limit),
+		"offset":     fmt.Sprintf("%d", offset),
+		"includes[]": "cover_art",
+		// HAPUS "order[relevance]" - ini sering menyebabkan error 400
+	}
 
-    // Tambahkan logging untuk debugging (opsional)
-    fmt.Printf("Searching manga with params: %+v\n", params)
+	resp, err := s.doRequestWithRetry(ctx, "/manga", params, 3)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
 
-    resp, err := s.doRequestWithRetry(ctx, "/manga", params, 3)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+	// Baca response body untuk logging
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-    if resp.StatusCode != http.StatusOK {
-        // Baca response body untuk tahu detail error
-        body, _ := io.ReadAll(resp.Body)
-        return nil, fmt.Errorf("MangaDex API error: %s - %s", resp.Status, string(body))
-    }
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("MangaDex API error: %s - Body: %s", resp.Status, string(bodyBytes))
+	}
 
-    var result model.MangaDexResponse
-    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-        return nil, err
-    }
+	var result model.MangaDexResponse
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		return nil, err
+	}
 
-    return &result, nil
+	return &result, nil
 }
 
 func (s *MangaDexService) GetMangaByID(ctx context.Context, id string) (*model.MangaDexResponse, error) {
@@ -132,12 +133,17 @@ func (s *MangaDexService) GetMangaByID(ctx context.Context, id string) (*model.M
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MangaDex API error: %s", resp.Status)
+		return nil, fmt.Errorf("MangaDex API error: %s - Body: %s", resp.Status, string(bodyBytes))
 	}
 
 	var result model.MangaDexResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, err
 	}
 
@@ -173,12 +179,17 @@ func (s *MangaDexService) GetMangaFeed(ctx context.Context, mangaID string, limi
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MangaDex API error: %s", resp.Status)
+		return nil, fmt.Errorf("MangaDex API error: %s - Body: %s", resp.Status, string(bodyBytes))
 	}
 
 	var result model.MangaDexResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, err
 	}
 
@@ -192,12 +203,17 @@ func (s *MangaDexService) GetAtHomeServer(ctx context.Context, chapterID string)
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("MangaDex API error: %s", resp.Status)
+		return nil, fmt.Errorf("MangaDex API error: %s - Body: %s", resp.Status, string(bodyBytes))
 	}
 
 	var result model.AtHomeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		return nil, err
 	}
 
